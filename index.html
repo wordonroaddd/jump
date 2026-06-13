@@ -1,1 +1,1058 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Jump Timer">
+<meta name="theme-color" content="#0e1116">
+<title>Jump Timer</title>
+<style>
+  :root {
+    --bg: #0e1116;
+    --panel: #161b22;
+    --line: #232a33;
+    --text: #e8edf2;
+    --muted: #7c8896;
+    --work: #ff5a3c;
+    --work-dim: #5a2419;
+    --rest: #2fc7a8;
+    --rest-dim: #134237;
+    --ready: #4a90e2;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+    transition: background 0.4s ease;
+  }
+  body.state-work { background: #1a0f0c; }
+  body.state-rest { background: #0a1714; }
+
+  .stage {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 12px 20px;
+  }
+
+  .phase {
+    font-size: 14px;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: var(--muted);
+    transition: color 0.3s ease;
+  }
+  body.state-work .phase { color: var(--work); }
+  body.state-rest .phase { color: var(--rest); }
+  body.state-done .phase { color: var(--rest); }
+
+  .ring-wrap { position: relative; width: min(70vw, 42dvh, 300px); aspect-ratio: 1; }
+  svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .track { fill: none; stroke: var(--line); stroke-width: 10; }
+  .prog {
+    fill: none;
+    stroke: var(--ready);
+    stroke-width: 10;
+    stroke-linecap: round;
+    transition: stroke 0.3s ease;
+  }
+  body.state-work .prog { stroke: var(--work); }
+  body.state-rest .prog { stroke: var(--rest); }
+
+  .count {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  .time {
+    font-size: clamp(64px, 22vw, 120px);
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    letter-spacing: -0.02em;
+  }
+  .rounds {
+    margin-top: 6px;
+    font-size: 15px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.04em;
+  }
+
+  .controls {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    justify-content: center;
+    padding: 0 24px 16px;
+  }
+  button {
+    font-family: inherit;
+    border: none;
+    cursor: pointer;
+    color: var(--text);
+    font-weight: 700;
+  }
+  .primary {
+    background: var(--ready);
+    color: #fff;
+    border-radius: 999px;
+    height: 64px;
+    min-width: 168px;
+    font-size: 19px;
+    letter-spacing: 0.04em;
+    transition: background 0.2s ease, transform 0.08s ease;
+  }
+  body.state-work .primary { background: var(--work); }
+  body.state-rest .primary { background: var(--rest); color: #06120f; }
+  .primary:active { transform: scale(0.96); }
+  .secondary {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    color: var(--muted);
+    border-radius: 999px;
+    height: 64px;
+    width: 64px;
+    font-size: 22px;
+  }
+  .secondary:active { background: var(--line); }
+
+  /* Round dots */
+  .dots {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
+    min-height: 16px;
+  }
+  .dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid var(--line);
+    background: transparent;
+    transition: background 0.25s ease, border-color 0.25s ease, transform 0.25s ease;
+  }
+  .dot.done { background: var(--muted); border-color: var(--muted); }
+  .dot.current { border-color: var(--ready); transform: scale(1.35); }
+  body.state-work .dot.current { border-color: var(--work); background: var(--work); }
+  body.state-rest .dot.current { border-color: var(--rest); }
+  body.state-work .dot.done,
+  body.state-rest .dot.done,
+  body.state-done .dot.done { background: var(--rest); border-color: var(--rest); }
+
+  /* Settings */
+  .settings {
+    border-top: 1px solid var(--line);
+    background: var(--panel);
+    padding: 12px 20px calc(10px + env(safe-area-inset-bottom));
+    display: flex;
+    justify-content: space-around;
+    gap: 10px;
+    transition: opacity 0.3s ease, max-height 0.3s ease;
+    overflow: hidden;
+    max-height: 160px;
+  }
+  .settings.hidden { opacity: 0; max-height: 0; padding-top: 0; padding-bottom: 0; border-color: transparent; }
+  .setting { text-align: center; flex: 1; max-width: 120px; }
+  .setting label {
+    display: block;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+  .stepper { display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .stepper button {
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    color: var(--text);
+    font-size: 20px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .stepper button:active { background: var(--line); }
+  .val {
+    font-size: 22px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    min-width: 44px;
+  }
+  .val small { font-size: 12px; color: var(--muted); font-weight: 500; }
+
+  /* App layout */
+  .app { display: flex; height: 100vh; height: 100dvh; }
+  .timer-col {
+    flex: 1; min-width: 0; min-height: 0;
+    display: flex; flex-direction: column;
+  }
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 18px calc(14px - 6px);
+    padding-top: calc(14px + env(safe-area-inset-top));
+  }
+  .brand {
+    font-size: 13px; letter-spacing: 0.2em; text-transform: uppercase;
+    font-weight: 700; color: var(--muted);
+  }
+  .log-toggle {
+    background: var(--panel); border: 1px solid var(--line);
+    color: var(--text); border-radius: 999px;
+    height: 38px; padding: 0 16px; font-size: 13px; font-weight: 700;
+    display: inline-flex; align-items: center; gap: 8px;
+    font-variant-numeric: tabular-nums;
+  }
+  .log-toggle b { color: var(--rest); }
+  .log-toggle:active { background: var(--line); }
+
+  /* Log panel */
+  .log-panel {
+    width: 300px; flex-shrink: 0;
+    background: var(--panel);
+    border-left: 1px solid var(--line);
+    display: flex; flex-direction: column;
+    padding: calc(20px + env(safe-area-inset-top)) 18px 20px;
+    overflow-y: auto;
+  }
+  .log-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .log-head h2 { font-size: 16px; font-weight: 800; letter-spacing: 0.01em; }
+  .log-close {
+    display: none;
+    background: none; border: none; color: var(--muted); font-size: 24px;
+    line-height: 1; height: 32px; width: 32px;
+  }
+  .log-list { display: flex; flex-direction: column; gap: 4px; flex: none; }
+  .day {
+    display: flex; align-items: center; gap: 12px;
+    padding: 11px 12px; border-radius: 12px;
+    background: var(--bg); border: 1px solid transparent;
+  }
+  .day.today { border-color: var(--rest); }
+  .day .check {
+    width: 22px; height: 22px; border-radius: 50%;
+    border: 2px solid var(--line); flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; color: #06120f;
+  }
+  .day.logged .check { background: var(--rest); border-color: var(--rest); }
+  .day .dname { font-size: 14px; font-weight: 600; flex: 1; }
+  .day.today .dname { color: var(--text); }
+  .day:not(.today):not(.logged) .dname { color: var(--muted); }
+  .day .dtime {
+    font-size: 14px; font-variant-numeric: tabular-nums;
+    color: var(--muted); font-weight: 600;
+  }
+  .day.logged .dtime { color: var(--text); }
+  .dright { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+  .dcal {
+    font-size: 11px; font-variant-numeric: tabular-nums;
+    color: var(--rest); font-weight: 600;
+  }
+  .wk-cal {
+    font-size: 11px; font-variant-numeric: tabular-nums;
+    color: var(--rest); font-weight: 600;
+  }
+  .week.locked .wk-cal { color: var(--muted); }
+
+  /* Week blocks */
+  .week-list { display: flex; flex-direction: column; gap: 10px; }
+  .week {
+    border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+    background: var(--bg);
+  }
+  .week.current { border-color: var(--rest); }
+  .week-head {
+    width: 100%; display: flex; align-items: center; gap: 10px;
+    background: none; border: none; color: var(--text);
+    padding: 14px 14px; text-align: left;
+  }
+  .week-head:active { background: var(--panel); }
+  .chev {
+    color: var(--muted); font-size: 12px; flex-shrink: 0;
+    transition: transform 0.2s ease;
+  }
+  .week.open .chev { transform: rotate(90deg); }
+  .wk-main { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .wk-num { font-size: 15px; font-weight: 800; }
+  .wk-range { font-size: 12px; color: var(--muted); }
+  .wk-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+  .wk-badge {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--rest);
+  }
+  .week.locked .wk-badge { color: var(--muted); letter-spacing: 0; }
+  .wk-total { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  .week-days {
+    display: none; flex-direction: column; gap: 4px;
+    padding: 0 10px 10px;
+  }
+  .week.open .week-days { display: flex; }
+
+  .day.editable .dname { cursor: pointer; }
+  .day-edit {
+    display: none; width: 100%; margin-top: 8px;
+    align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .day.open .day-edit { display: flex; }
+  .day.editable { flex-wrap: wrap; }
+  .ed {
+    height: 34px; min-width: 34px; padding: 0 10px;
+    border-radius: 9px; background: var(--panel); border: 1px solid var(--line);
+    color: var(--text); font-size: 16px; font-weight: 700;
+  }
+  .ed:active { background: var(--line); }
+  .ed.clear { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--muted); }
+  .ed-min {
+    width: 56px; height: 34px; text-align: center;
+    background: var(--panel); border: 1px solid var(--line); color: var(--text);
+    border-radius: 9px; font-size: 15px; font-family: inherit;
+    -moz-appearance: textfield;
+  }
+  .ed-min::-webkit-outer-spin-button,
+  .ed-min::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .ed-unit { font-size: 13px; color: var(--muted); }
+  .week-reset {
+    margin-top: 14px; background: none; border: 1px solid var(--line);
+    color: var(--muted); border-radius: 10px; height: 38px; font-size: 12px;
+    letter-spacing: 0.04em;
+  }
+  .week-reset:active { background: var(--bg); }
+
+  /* Fuel section */
+  .fuel { margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--line); }
+  .fuel.fuel-first { margin-top: 4px; padding-top: 0; border-top: none; }
+  .fuel h2 { font-size: 16px; font-weight: 800; margin-bottom: 12px; }
+  .section-h {
+    font-size: 16px; font-weight: 800;
+    margin: 24px 0 12px; padding-top: 20px; border-top: 1px solid var(--line);
+  }
+  .fuel-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 7px 0; font-size: 14px;
+  }
+  .fuel-row span { color: var(--muted); }
+  .fuel-row b { font-variant-numeric: tabular-nums; font-weight: 700; }
+  .fuel-row.target b { color: var(--rest); font-size: 18px; }
+  .target-sub {
+    font-size: 12px; color: var(--muted); margin: 2px 0 4px;
+    font-variant-numeric: tabular-nums;
+  }
+  .profile-toggle {
+    margin-top: 12px; width: 100%;
+    background: var(--bg); border: 1px solid var(--line); color: var(--text);
+    border-radius: 10px; height: 40px; font-size: 13px; font-weight: 600;
+  }
+  .profile-toggle:active { background: var(--line); }
+  .profile {
+    margin-top: 12px; display: flex; flex-direction: column; gap: 10px;
+    overflow: hidden;
+  }
+  .profile.hidden { display: none; }
+  .sex-toggle { display: flex; gap: 8px; }
+  .sex-toggle button {
+    flex: 1; height: 38px; border-radius: 10px;
+    background: var(--bg); border: 1px solid var(--line); color: var(--muted);
+    font-size: 13px; font-weight: 700;
+  }
+  .sex-toggle button.active {
+    background: var(--rest-dim); border-color: var(--rest); color: var(--text);
+  }
+  .pf {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 13px; color: var(--muted);
+  }
+  .pf > span { display: inline-flex; align-items: center; gap: 4px; color: var(--text); }
+  .pf input, .pf select {
+    width: 56px; height: 36px; text-align: center;
+    background: var(--bg); border: 1px solid var(--line); color: var(--text);
+    border-radius: 8px; font-size: 15px; font-family: inherit;
+    -moz-appearance: textfield;
+  }
+  .pf input::-webkit-outer-spin-button,
+  .pf input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .pf select { width: 130px; text-align: left; padding: 0 8px; }
+  .fuel-note {
+    margin-top: 14px; font-size: 11px; line-height: 1.5; color: var(--muted);
+  }
+
+  .backdrop {
+    display: none;
+    position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+    z-index: 5; opacity: 0; transition: opacity 0.3s ease;
+  }
+
+  /* Mobile: log panel becomes a slide-in drawer */
+  @media (max-width: 720px) {
+    .log-panel {
+      position: fixed; top: 0; right: 0; height: 100%;
+      width: min(86vw, 320px); z-index: 6;
+      transform: translateX(100%); transition: transform 0.3s ease;
+      box-shadow: -12px 0 40px rgba(0,0,0,0.5);
+    }
+    .log-panel.open { transform: translateX(0); }
+    .log-close { display: block; }
+    .backdrop.show { display: block; opacity: 1; }
+  }
+  /* Desktop: panel always visible, hide toggle */
+  @media (min-width: 721px) {
+    .log-toggle { display: none; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+  <div class="app">
+  <div class="timer-col">
+    <div class="topbar">
+      <span class="brand">Jump Timer</span>
+      <button class="log-toggle" id="logToggle">Log <b id="todayBadge">0:00</b></button>
+    </div>
+    <div class="stage">
+    <div class="phase" id="phase">Ready</div>
+    <div class="ring-wrap">
+      <svg viewBox="0 0 200 200">
+        <circle class="track" cx="100" cy="100" r="92"></circle>
+        <circle class="prog" id="prog" cx="100" cy="100" r="92"></circle>
+      </svg>
+      <div class="count">
+        <div class="time" id="time">30</div>
+        <div class="rounds" id="roundLabel">Work 1 of 20</div>
+      </div>
+    </div>
+    <div class="dots" id="dots"></div>
+  </div>
+
+  <div class="controls">
+    <button class="secondary" id="reset" aria-label="Reset">↺</button>
+    <button class="primary" id="startBtn">Start</button>
+  </div>
+
+  <div class="settings" id="settings">
+    <div class="setting">
+      <label>Work</label>
+      <div class="stepper">
+        <button data-key="work" data-dir="-1">−</button>
+        <div class="val"><span id="workVal">30</span><small>s</small></div>
+        <button data-key="work" data-dir="1">+</button>
+      </div>
+    </div>
+    <div class="setting">
+      <label>Rest</label>
+      <div class="stepper">
+        <button data-key="rest" data-dir="-1">−</button>
+        <div class="val"><span id="restVal">30</span><small>s</small></div>
+        <button data-key="rest" data-dir="1">+</button>
+      </div>
+    </div>
+    <div class="setting">
+      <label>Rounds</label>
+      <div class="stepper">
+        <button data-key="rounds" data-dir="-1">−</button>
+        <div class="val"><span id="roundsVal">20</span></div>
+        <button data-key="rounds" data-dir="1">+</button>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <aside class="log-panel" id="logPanel">
+    <div class="log-head">
+      <h2>Fuel &amp; log</h2>
+      <button class="log-close" id="logClose" aria-label="Close">×</button>
+    </div>
+
+    <div class="fuel fuel-first">
+      <div class="fuel-row target">
+        <span>Eat to lose fat</span><b id="targetCal">–</b>
+      </div>
+      <p class="target-sub" id="targetSub"></p>
+      <div class="fuel-row">
+        <span>Maintenance</span><b id="maintainCal">–</b>
+      </div>
+      <div class="fuel-row">
+        <span>Burned today</span><b id="burnToday">~0 cal</b>
+      </div>
+
+      <button class="profile-toggle" id="profileToggle">Edit my details ▾</button>
+      <div class="profile hidden" id="profile">
+        <div class="sex-toggle">
+          <button data-sex="male" id="sexM" class="active">Male</button>
+          <button data-sex="female" id="sexF">Female</button>
+        </div>
+        <label class="pf">Weight <span><input id="inWeight" type="number" inputmode="decimal"> lb</span></label>
+        <label class="pf">Height <span><input id="inFt" type="number" inputmode="numeric"> ft <input id="inIn" type="number" inputmode="numeric"> in</span></label>
+        <label class="pf">Age <span><input id="inAge" type="number" inputmode="numeric"> yrs</span></label>
+        <label class="pf">Activity <span>
+          <select id="inActivity">
+            <option value="1.2">Mostly sitting</option>
+            <option value="1.375">Lightly active</option>
+            <option value="1.55">Moderately active</option>
+            <option value="1.725">Very active</option>
+          </select></span>
+        </label>
+      </div>
+
+      <p class="fuel-note">Rough estimates from standard formulas, not medical advice. A steady, modest deficit with high protein beats crash dieting. Check with a doctor before big changes.</p>
+    </div>
+
+    <h2 class="section-h">Weeks</h2>
+    <div class="week-list" id="weekList"></div>
+  </aside>
+  </div>
+  <div class="backdrop" id="backdrop"></div>
+
+<script>
+(function () {
+  const C = 2 * Math.PI * 92;
+  const progEl = document.getElementById('prog');
+  progEl.style.strokeDasharray = C;
+  progEl.style.strokeDashoffset = 0;
+
+  const cfg = { work: 30, rest: 30, rounds: 20 };
+  const steps = { work: 5, rest: 5, rounds: 1 };
+  const mins  = { work: 5, rest: 5, rounds: 1 };
+
+  let state = 'idle';      // idle | work | rest | done
+  let running = false;
+  let round = 1;
+  let remaining = cfg.work;
+  let tickHandle = null;
+  let endAt = 0;
+
+  const el = {
+    phase: document.getElementById('phase'),
+    time: document.getElementById('time'),
+    roundLabel: document.getElementById('roundLabel'),
+    dots: document.getElementById('dots'),
+    logList: document.getElementById('logList'),
+    weekList: document.getElementById('weekList'),
+    todayBadge: document.getElementById('todayBadge'),
+    logToggle: document.getElementById('logToggle'),
+    logClose: document.getElementById('logClose'),
+    logPanel: document.getElementById('logPanel'),
+    backdrop: document.getElementById('backdrop'),
+    burnToday: document.getElementById('burnToday'),
+    maintainCal: document.getElementById('maintainCal'),
+    targetCal: document.getElementById('targetCal'),
+    targetSub: document.getElementById('targetSub'),
+    profileToggle: document.getElementById('profileToggle'),
+    profile: document.getElementById('profile'),
+    sexM: document.getElementById('sexM'),
+    sexF: document.getElementById('sexF'),
+    inWeight: document.getElementById('inWeight'),
+    inFt: document.getElementById('inFt'),
+    inIn: document.getElementById('inIn'),
+    inAge: document.getElementById('inAge'),
+    inActivity: document.getElementById('inActivity'),
+    start: document.getElementById('startBtn'),
+    reset: document.getElementById('reset'),
+    settings: document.getElementById('settings'),
+    workVal: document.getElementById('workVal'),
+    restVal: document.getElementById('restVal'),
+    roundsVal: document.getElementById('roundsVal'),
+  };
+
+  // ---- Workout log (persistent) ----
+  const STORE_KEY = 'jumptimer:log';
+  let logData = {};            // { 'YYYY-MM-DD': seconds }
+  let sessionWork = 0;         // banked work seconds in the current run
+
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+  function ymd(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function fmt(sec) {
+    sec = Math.round(sec);
+    const m = Math.floor(sec / 60), s = sec % 60;
+    return m + ':' + pad(s);
+  }
+  function weekDays() {
+    const now = new Date();
+    const offset = (now.getDay() + 6) % 7; // days since Monday
+    const mon = new Date(now); mon.setDate(now.getDate() - offset); mon.setHours(0,0,0,0);
+    const out = [];
+    for (let i = 0; i < 7; i++) { const d = new Date(mon); d.setDate(mon.getDate() + i); out.push(d); }
+    return out;
+  }
+
+  function loadLog() {
+    try {
+      const raw = localStorage.getItem(STORE_KEY);
+      if (raw) logData = JSON.parse(raw);
+    } catch (e) { logData = {}; }
+    renderLog();
+  }
+  function saveLog() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(logData)); } catch (e) {}
+  }
+
+  const DAY_NAMES = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const MON_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  function mondayOf(d) {
+    const offset = (d.getDay() + 6) % 7;
+    const m = new Date(d); m.setDate(d.getDate() - offset); m.setHours(0,0,0,0);
+    return m;
+  }
+  // ISO-8601 week number
+  function isoWeek(d) {
+    const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    const dayNum = (t.getUTCDay() + 6) % 7;
+    t.setUTCDate(t.getUTCDate() - dayNum + 3);
+    const firstThu = new Date(Date.UTC(t.getUTCFullYear(), 0, 4));
+    const firstDayNum = (firstThu.getUTCDay() + 6) % 7;
+    firstThu.setUTCDate(firstThu.getUTCDate() - firstDayNum + 3);
+    return 1 + Math.round((t - firstThu) / (7 * 86400000));
+  }
+  function weekKeyFromMonday(mon) { return ymd(mon); } // Monday's date uniquely keys a week
+
+  const expandedWeeks = {};   // weekKey -> bool (override of default)
+  let didInitExpand = false;
+
+  function weekBurnCal(secs) {
+    const kg = profile.weightLb / 2.2046;
+    return MET * kg * (secs / 3600);
+  }
+
+  function renderLog() {
+    const today = new Date();
+    const todayKey = ymd(today);
+    const curMon = mondayOf(today);
+    const curKey = weekKeyFromMonday(curMon);
+    if (!didInitExpand) { expandedWeeks[curKey] = true; didInitExpand = true; }
+
+    // Collect Mondays for all weeks that have data, plus the current week
+    const mondaySet = {};
+    Object.keys(logData).forEach(k => {
+      if ((logData[k] || 0) <= 0) return;
+      const parts = k.split('-');
+      const d = new Date(+parts[0], +parts[1] - 1, +parts[2]);
+      const m = mondayOf(d);
+      mondaySet[ymd(m)] = m;
+    });
+    mondaySet[curKey] = curMon;
+
+    const mondays = Object.values(mondaySet).sort((a, b) => b - a); // newest first
+
+    el.weekList.innerHTML = '';
+    mondays.forEach(mon => {
+      const key = weekKeyFromMonday(mon);
+      const isCurrent = key === curKey;
+      const days = [];
+      let total = 0;
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(mon); d.setDate(mon.getDate() + i);
+        const k = ymd(d);
+        const secs = logData[k] || 0;
+        total += secs;
+        days.push({ d, k, secs, i });
+      }
+      const wk = isoWeek(mon);
+      const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+      const range = MON_NAMES[mon.getMonth()] + ' ' + mon.getDate() + ' – ' +
+        (sun.getMonth() === mon.getMonth() ? '' : MON_NAMES[sun.getMonth()] + ' ') + sun.getDate();
+      const open = !!expandedWeeks[key];
+
+      const block = document.createElement('div');
+      block.className = 'week' + (isCurrent ? ' current' : ' locked') + (open ? ' open' : '');
+
+      // Header
+      const head = document.createElement('button');
+      head.className = 'week-head';
+      head.innerHTML =
+        '<span class="chev">▸</span>' +
+        '<span class="wk-main"><span class="wk-num">Week ' + wk + '</span>' +
+        '<span class="wk-range">' + range + '</span></span>' +
+        '<span class="wk-meta">' +
+          '<span class="wk-badge">' + (isCurrent ? 'Live' : '🔒') + '</span>' +
+          '<span class="wk-total">' + fmt(total) + '</span>' +
+          '<span class="wk-cal">' + (total > 0 ? '~' + Math.round(weekBurnCal(total)) + ' cal' : '') + '</span>' +
+        '</span>';
+      head.addEventListener('click', () => {
+        expandedWeeks[key] = !expandedWeeks[key];
+        block.classList.toggle('open');
+      });
+      block.appendChild(head);
+
+      // Days
+      const list = document.createElement('div');
+      list.className = 'week-days';
+      const totalEl = head.querySelector('.wk-total');
+      const weekCalEl = head.querySelector('.wk-cal');
+
+      days.forEach(day => {
+        const row = document.createElement('div');
+        row.className = 'day' + (day.secs > 0 ? ' logged' : '') + (day.k === todayKey ? ' today' : '');
+
+        const right = document.createElement('div');
+        right.className = 'dright';
+        const time = document.createElement('div');
+        time.className = 'dtime';
+        time.textContent = day.secs > 0 ? fmt(day.secs) : '–';
+        const dcal = document.createElement('div');
+        dcal.className = 'dcal';
+        dcal.textContent = day.secs > 0 ? '~' + Math.round(weekBurnCal(day.secs)) + ' cal' : '';
+        right.appendChild(time);
+        right.appendChild(dcal);
+
+        row.innerHTML =
+          '<div class="check">' + (day.secs > 0 ? '✓' : '') + '</div>' +
+          '<div class="dname">' + DAY_NAMES[day.i] + (day.k === todayKey ? ' · today' : '') + '</div>';
+        row.appendChild(right);
+
+        if (isCurrent) {
+          row.classList.add('editable');
+          const editor = document.createElement('div');
+          editor.className = 'day-edit';
+          editor.innerHTML =
+            '<button class="ed minus">−</button>' +
+            '<input class="ed-min" type="number" inputmode="decimal" step="0.5"> <span class="ed-unit">min</span>' +
+            '<button class="ed plus">+</button>' +
+            '<button class="ed clear">clear</button>';
+          row.appendChild(editor);
+
+          const input = editor.querySelector('.ed-min');
+          const syncInput = () => { input.value = day.secs ? +(day.secs / 60).toFixed(1) : ''; };
+          syncInput();
+
+          function setSecs(newSecs) {
+            day.secs = Math.max(0, Math.round(newSecs));
+            if (day.secs > 0) logData[day.k] = day.secs; else delete logData[day.k];
+            saveLog();
+            // update this row + week total + fuel without full rebuild
+            time.textContent = day.secs > 0 ? fmt(day.secs) : '–';
+            dcal.textContent = day.secs > 0 ? '~' + Math.round(weekBurnCal(day.secs)) + ' cal' : '';
+            row.classList.toggle('logged', day.secs > 0);
+            row.querySelector('.check').textContent = day.secs > 0 ? '✓' : '';
+            let t = 0; days.forEach(x => t += x.secs);
+            totalEl.textContent = fmt(t);
+            weekCalEl.textContent = t > 0 ? '~' + Math.round(weekBurnCal(t)) + ' cal' : '';
+            if (day.k === todayKey) el.todayBadge.textContent = fmt(logData[todayKey] || 0);
+            computeFuel();
+          }
+
+          row.querySelector('.dname').addEventListener('click', () => row.classList.toggle('open'));
+          row.querySelector('.check').addEventListener('click', () => row.classList.toggle('open'));
+          editor.querySelector('.minus').addEventListener('click', () => { setSecs(day.secs - 30); syncInput(); });
+          editor.querySelector('.plus').addEventListener('click', () => { setSecs(day.secs + 30); syncInput(); });
+          editor.querySelector('.clear').addEventListener('click', () => { setSecs(0); syncInput(); });
+          input.addEventListener('input', () => {
+            const v = parseFloat(input.value);
+            setSecs(isFinite(v) && v > 0 ? v * 60 : 0);
+          });
+        }
+
+        list.appendChild(row);
+      });
+
+      block.appendChild(list);
+      el.weekList.appendChild(block);
+    });
+
+    el.todayBadge.textContent = fmt(logData[todayKey] || 0);
+    computeFuel();
+  }
+
+  // ---- Fuel / calories ----
+  const PROFILE_KEY = 'jumptimer:profile';
+  const MET = 11.5; // vigorous rope, applied to logged work time
+  const profile = { sex: 'male', weightLb: 175, ft: 5, in: 10, age: 30, activity: 1.375 };
+
+  function loadProfile() {
+    try {
+      const raw = localStorage.getItem(PROFILE_KEY);
+      if (raw) Object.assign(profile, JSON.parse(raw));
+    } catch (e) {}
+    // reflect into inputs
+    el.inWeight.value = profile.weightLb;
+    el.inFt.value = profile.ft;
+    el.inIn.value = profile.in;
+    el.inAge.value = profile.age;
+    el.inActivity.value = String(profile.activity);
+    setSexUI(profile.sex);
+  }
+  function saveProfile() {
+    try { localStorage.setItem(PROFILE_KEY, JSON.stringify(profile)); } catch (e) {}
+  }
+  function setSexUI(sex) {
+    el.sexM.classList.toggle('active', sex === 'male');
+    el.sexF.classList.toggle('active', sex === 'female');
+  }
+
+  function computeFuel() {
+    const kg = profile.weightLb / 2.2046;
+    const cm = ((profile.ft * 12) + profile.in) * 2.54;
+    const age = profile.age;
+
+    // Burned today from logged work time
+    const todaySecs = logData[ymd(new Date())] || 0;
+    const burn = MET * kg * (todaySecs / 3600);
+    el.burnToday.textContent = '~' + Math.round(burn) + ' cal';
+
+    // Maintenance via Mifflin-St Jeor
+    if (!kg || !cm || !age) { el.maintainCal.textContent = '–'; el.targetCal.textContent = '–'; el.targetSub.textContent = ''; return; }
+    let bmr = 10 * kg + 6.25 * cm - 5 * age + (profile.sex === 'male' ? 5 : -161);
+    const tdee = bmr * profile.activity;
+    const maintain = Math.round(tdee / 10) * 10;
+
+    // Modest deficit (~500/day ≈ 1 lb/week), with a sensible floor
+    const floor = profile.sex === 'male' ? 1500 : 1200;
+    let target = Math.max(floor, Math.round((tdee - 500) / 10) * 10);
+    el.maintainCal.textContent = maintain.toLocaleString() + ' cal';
+    el.targetCal.textContent = target.toLocaleString() + ' cal';
+    const gap = maintain - target;
+    el.targetSub.textContent = gap >= 400
+      ? 'about ' + gap + ' under maintenance, roughly 1 lb/week'
+      : 'gentle deficit (kept above a safe floor)';
+  }
+
+  function commitWork(partial) {
+    const add = sessionWork + (partial || 0);
+    sessionWork = 0;
+    if (add < 1) return;
+    const key = ymd(new Date());
+    logData[key] = (logData[key] || 0) + add;
+    saveLog();
+    renderLog();
+  }
+
+  // ---- Audio ----
+  let actx = null;
+  function ensureAudio() {
+    if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+    if (actx && actx.state === 'suspended') actx.resume();
+  }
+  function beep(freq, dur, vol) {
+    if (!actx) return;
+    const o = actx.createOscillator();
+    const g = actx.createGain();
+    o.frequency.value = freq;
+    o.type = 'sine';
+    g.gain.setValueAtTime(0.0001, actx.currentTime);
+    g.gain.exponentialRampToValueAtTime(vol || 0.25, actx.currentTime + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + (dur || 0.15));
+    o.connect(g); g.connect(actx.destination);
+    o.start(); o.stop(actx.currentTime + (dur || 0.15));
+  }
+  const tickBeep  = () => beep(880, 0.12, 0.22);
+  const workBeep  = () => { beep(1320, 0.18, 0.3); setTimeout(() => beep(1660, 0.22, 0.3), 130); };
+  const restBeep  = () => beep(560, 0.32, 0.28);
+  const doneBeep  = () => { beep(880,0.2,0.3); setTimeout(()=>beep(1100,0.2,0.3),200); setTimeout(()=>beep(1320,0.4,0.3),400); };
+
+  // ---- Render ----
+  function totalFor(s) { return s === 'rest' ? cfg.rest : cfg.work; }
+
+  function buildDots() {
+    el.dots.innerHTML = '';
+    for (let i = 0; i < cfg.rounds; i++) {
+      const d = document.createElement('div');
+      d.className = 'dot';
+      el.dots.appendChild(d);
+    }
+  }
+  function updateDots() {
+    const nodes = el.dots.children;
+    for (let i = 0; i < nodes.length; i++) {
+      const r = i + 1; // this dot's round number
+      let cls = 'dot';
+      if (state === 'done') {
+        cls += ' done';
+      } else if (state === 'work') {
+        if (r < round) cls += ' done';
+        else if (r === round) cls += ' current';
+      } else if (state === 'rest') {
+        // work for current round is finished during its rest
+        if (r <= round) cls += ' done';
+      } else { // idle
+        if (r === 1) cls += ' current';
+      }
+      nodes[i].className = cls;
+    }
+  }
+
+  function render() {
+    el.time.textContent = Math.ceil(remaining);
+    document.body.className = state === 'work' ? 'state-work'
+      : state === 'rest' ? 'state-rest'
+      : state === 'done' ? 'state-done' : '';
+    el.phase.textContent = state === 'work' ? 'Work'
+      : state === 'rest' ? 'Rest'
+      : state === 'done' ? 'Done' : 'Ready';
+    if (state === 'done') {
+      el.roundLabel.textContent = 'All ' + cfg.rounds + ' rounds done';
+    } else if (state === 'rest') {
+      const left = cfg.rounds - round;
+      el.roundLabel.textContent = left > 0
+        ? (left === 1 ? '1 round to go' : left + ' rounds to go')
+        : 'Last rest';
+    } else {
+      el.roundLabel.textContent = 'Work ' + round + ' of ' + cfg.rounds;
+    }
+    const total = state === 'idle' ? cfg.work : totalFor(state);
+    const frac = state === 'done' ? 1 : Math.max(0, Math.min(1, remaining / total));
+    progEl.style.strokeDashoffset = C * (1 - frac);
+    updateDots();
+  }
+
+  // ---- Loop ----
+  function startInterval(s) {
+    state = s;
+    remaining = totalFor(s);
+    endAt = performance.now() + remaining * 1000;
+    if (s === 'work') workBeep(); else restBeep();
+    render();
+  }
+  let lastWhole = null;
+  function tick() {
+    if (!running) return;
+    const now = performance.now();
+    remaining = (endAt - now) / 1000;
+    const whole = Math.ceil(remaining);
+    if (whole !== lastWhole) {
+      lastWhole = whole;
+      if (whole <= 3 && whole >= 1) tickBeep();
+    }
+    if (remaining <= 0) {
+      advance();
+    } else {
+      render();
+    }
+  }
+  function advance() {
+    if (state === 'work') {
+      sessionWork += cfg.work;
+      if (round >= cfg.rounds) { finish(); return; }
+      startInterval('rest');
+    } else if (state === 'rest') {
+      round += 1;
+      startInterval('work');
+    }
+    lastWhole = null;
+  }
+  function finish() {
+    running = false;
+    clearInterval(tickHandle);
+    state = 'done';
+    remaining = 0;
+    doneBeep();
+    commitWork(0);
+    el.start.textContent = 'Restart';
+    el.settings.classList.remove('hidden');
+    render();
+  }
+
+  // ---- Controls ----
+  function begin() {
+    ensureAudio();
+    if (state === 'idle' || state === 'done') {
+      round = 1;
+      sessionWork = 0;
+      startInterval('work');
+    } else {
+      // resume
+      endAt = performance.now() + remaining * 1000;
+    }
+    running = true;
+    lastWhole = null;
+    el.start.textContent = 'Pause';
+    el.settings.classList.add('hidden');
+    clearInterval(tickHandle);
+    tickHandle = setInterval(tick, 50);
+  }
+  function pause() {
+    running = false;
+    clearInterval(tickHandle);
+    el.start.textContent = 'Resume';
+  }
+  function reset() {
+    running = false;
+    clearInterval(tickHandle);
+    // bank any work done this session, including a partial in-progress interval
+    const partial = (state === 'work') ? Math.max(0, totalFor('work') - remaining) : 0;
+    commitWork(partial);
+    state = 'idle';
+    round = 1;
+    remaining = cfg.work;
+    lastWhole = null;
+    el.start.textContent = 'Start';
+    el.settings.classList.remove('hidden');
+    render();
+  }
+
+  el.start.addEventListener('click', () => {
+    if (running) pause(); else begin();
+  });
+  el.reset.addEventListener('click', reset);
+
+  // ---- Log drawer ----
+  function openDrawer() { el.logPanel.classList.add('open'); el.backdrop.classList.add('show'); }
+  function closeDrawer() { el.logPanel.classList.remove('open'); el.backdrop.classList.remove('show'); }
+  el.logToggle.addEventListener('click', openDrawer);
+  el.logClose.addEventListener('click', closeDrawer);
+  el.backdrop.addEventListener('click', closeDrawer);
+
+  // ---- Profile inputs ----
+  el.profileToggle.addEventListener('click', () => {
+    el.profile.classList.toggle('hidden');
+    el.profileToggle.textContent = el.profile.classList.contains('hidden')
+      ? 'Edit my details ▾' : 'Done ▴';
+  });
+  function num(v, fallback) { const n = parseFloat(v); return isFinite(n) && n >= 0 ? n : fallback; }
+  el.inWeight.addEventListener('input', () => { profile.weightLb = num(el.inWeight.value, 0); saveProfile(); computeFuel(); renderLog(); });
+  el.inFt.addEventListener('input', () => { profile.ft = num(el.inFt.value, 0); saveProfile(); computeFuel(); });
+  el.inIn.addEventListener('input', () => { profile.in = num(el.inIn.value, 0); saveProfile(); computeFuel(); });
+  el.inAge.addEventListener('input', () => { profile.age = num(el.inAge.value, 0); saveProfile(); computeFuel(); });
+  el.inActivity.addEventListener('change', () => { profile.activity = parseFloat(el.inActivity.value); saveProfile(); computeFuel(); });
+  el.sexM.addEventListener('click', () => { profile.sex = 'male'; setSexUI('male'); saveProfile(); computeFuel(); });
+  el.sexF.addEventListener('click', () => { profile.sex = 'female'; setSexUI('female'); saveProfile(); computeFuel(); });
+
+  // ---- Steppers ----
+  document.querySelectorAll('.stepper button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.key, dir = +btn.dataset.dir;
+      let v = cfg[key] + dir * steps[key];
+      if (v < mins[key]) v = mins[key];
+      if (key === 'rounds' && v > 50) v = 50;
+      if (key !== 'rounds' && v > 600) v = 600;
+      cfg[key] = v;
+      el[key + 'Val'].textContent = v;
+      if (key === 'rounds') buildDots();
+      if (state === 'idle') { remaining = cfg.work; }
+      render();
+    });
+  });
+
+  buildDots();
+  render();
+  loadProfile();
+  loadLog();
+})();
+</script>
+</body>
+</html>
